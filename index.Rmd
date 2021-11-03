@@ -19,15 +19,15 @@ tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
 
 ## Data Wrangling, Exploration, Visualization
 
-### Name and EID here
+### Morgan Daniels mcd2925
 
 #### Introduction 
 
-Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
+The two datasets I chose include "CPI" a dataset that has the average Consumer Price Index - an index for the variation in average prices of consumer items in the US over the last 60 years. The second data set is "NHE2019" which includes the average cost of various healthcare expenses, such as total health care costs, out of pocket health care costs, prescription costs and more over the last 60 years. I chose these two sets to compare because I am an economics major interested in health care costs in America and how much they have increased over the last 30 or so years. I interned in Health Insurance this summer and have a job working at an insurance brokerage and seeing the costs to employers and employees was staggering to me. 
 
 ```{R}
-# read your datasets in here, e.g., with read_csv()
-
+CPI2 <- read.csv("~/project1/CPI 2.csv")
+NHE2019 <- read.csv("~/project1/NHE2019.csv")
 ```
 
 #### Tidying: Reshaping
@@ -35,52 +35,90 @@ Paragraph or two introducing your datasets and variables, why they are interesti
 If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy). Alternatively, it may be easier to wait until the wrangling section so you can reshape your summary statistics. Note here if you are going to do this.
 
 ```{R}
-# your tidying code (if applicable; can also wait until wrangling section)
-```
+library(tidyverse)
+
+NHE <- NHE2019[-c(7,8,10:280, 287,288, 290:542),]
+
+CPI <- CPI2[-c(1:48, 109:110),]
+
+colnames(NHE) = c("Label","1960":"2019")
+
+NHE1 <- pivot_longer(NHE, c("1960":"2019"), names_to = "Year", values_to = "value")
+
+NHE2 <- NHE1 %>% group_by(Label) %>% mutate(row = row_number()) %>% pivot_wider(names_from = Label, values_from = value) %>% select(-row)
+
+``` 
 
     
 #### Joining/Merging
 
 ```{R}
-# your joining code
+library(dplyr)
+library(gt)
 
-# your joining code
+class(NHE2$Year)="integer"
+class(NHE2$`Total National Health Expenditures`)="integer"
+class(NHE2$`Total Prescription Drug Expenditures`)="integer"
+class(NHE2$`     Out of pocket- Health`)="integer"
+class(NHE2$`     Health Insurance- Health`)="integer"
+class(NHE2$`          Private Health Insurance- Health`)="integer"
+class(NHE2$`          Medicare- Health`)="integer"
+class(NHE2$`          Medicaid (Title XIX)- Health`)="integer"
+class(NHE2$`          CHIP (Title XIX and Title XXI)- Health`)="integer"
+class(NHE2$`     Out of pocket- Prescrip`)="integer"
+class(NHE2$`     Health Insurance- Prescrip`)="integer"
+class(NHE2$`          Private Health Insurance- Prescrip`)="integer"
+class(NHE2$`          Medicare- Prescrip`)="integer"
+class(NHE2$`          Medicaid (Title XIX)- Prescrip`)="integer"
+class(NHE2$`          CHIP (Title XIX and Title XXI)- Prescrip`)="integer"
+hlthcare <- full_join(NHE2, CPI, by="Year")
+          
 ```
 
-Discussions of joining here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+I did a full join my two data sets by year. The CPI data set only has two real variables and I decided to full join them to create a more complete data set and compare the Consumer Price Index to the increase in healthcare costs in the United States. Before joining the datasets I cut out a ton of unnecessary rows in the original NHE2019 dataset and kept the 8 variables that I knew I would want to compare and make plots with. This also made the join and tidying process much more manageable. 
 
 ####  Wrangling
 
 ```{R}
-# your wrangling code
+colnames(hlthcare) = c("Year", "TNHE", "OOPH", "HIH", "PHIH", "MDCRH", "MDCDH", "CHIPH", "TPD", "OOPP", "HIP", "PHIP", "MDCRP", "MDCDP", "CHIPP", "CPI", "PCT_CPI")
 
-# your wrangling code
+hlthcare1 <- hlthcare %>% mutate(govh = MDCRH+MDCDH) %>% mutate(govp = MDCRP + MDCDP) %>% mutate(Decade=case_when(Year>=2010 ~ 'Tens', Year>=2000~ 'Two thousands', Year>=1990 ~ 'Ninties', Year >= 1980 ~ 'Eighties', Year>=1970 ~ 'Seventies', Year>=1960 ~ 'Sixties')) 
 
-# your wrangling code
+hlthcare1 %>% group_by(Decade) %>% filter(govh>0) %>% head(1)
+
+hlthcare1 %>% arrange(desc(PCT_CPI)) %>% head(5)
+
+hlthcare1 %>% select(TNHE, OOPH, HIH, PHIH, TPD, OOPP, HIP, CPI, govh, govp) %>% summarise_each(funs(mean=mean, sd=sd, min=min, max=max, median=median)) %>% pivot_longer(c("TNHE_mean":"govp_median"), names_to="Labels", values_to="Value") %>% separate("Labels", into=c("Label", "Stat")) %>% pivot_wider(names_from="Label", values_from="Value") -> table1
+
+table1 %>% gt %>% tab_header(title=md("**Summary Statistics**"),
+             subtitle=md("My health care spending project summary statistics")) 
+
 ```
 
-Your discussion of wrangling section here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+First I renamed all of the columns as abbreviations to make them easier to use in dplyr functions. Then I used mutate to create three new variables, one that represented the percentage change in total national health expenditures each year, one of the percentage change in total prescription expenditures, one that documented full government spending of medicare and medicaid on health expenditures, and one that created a new categorical variable that organizes the year by decade. I then used code to find what decade the government began spending money on healthcare insurance (programs like medicaid, medicare, and CHIP).I used arrange to put them in descending order based on percentage change on CPI, National Health Expenditures and Prescription expenditures to compare if these years are similar or close to each other. I then created a summary statistics table for the 10 most important variables in my dataset.
 
 
 #### Visualizing
 
 ```{R}
-# your plot 1
+ggplot(hlthcare1, aes(TNHE, CPI, color=Decade)) + geom_point() + scale_x_continuous(n.breaks = 5) + ggtitle("Yearly Consumer Price Index Compared to Yearly Health Expenditures") + theme_light()
+
 ```
 
-Your discussion of plot 1
+For this plot I compared the total national health expenditures and the consumer price index. I also overlayed decade to see if the plot showed that both total national health expenditures and consumer price index increased with decade. There is clearly much larger exponential increase in the consumer price index in the 70s matched by an increase in the health expenditures in the 80s.This plot also shows that in the later two thousands there was a larger increase in the CPI over the increase in the national health expenditures. 
 
 ```{R}
-# your plot 2
+ggplot(hlthcare1, aes(x = Decade, y = PCT_CPI))+ geom_bar(aes(fill=Decade), stat="summary",fun=mean) + theme(legend.position="none") + ggtitle("Average CPI Change by Decade") + scale_fill_brewer(palette = "Greens")
 ```
 
-Your discussion of plot 2
+For this plot I decided to group by decade and compare the mean percentage change in the Consumer Price Index. This show that the 70s had the largest mean percentage change as a decade, confirming what was discovered during wrangling and matching the inflation crisis of the 90s. 
 
 ```{R}
-# your plot 3
+ggplot(hlthcare1, aes(govh, CPI)) + geom_density2d_filled() + 
+    geom_jitter() + ggtitle("Yearly Total Government Spending vs. CPI") 
 ```
 
-Your discussion of plot 3
+For the final plot I created a density plot that graphs total government spending on health care against the consumer price index. This one I created to compare to the first graph with total health expenditures but also to show that the increase in both government spending largely matches the steady increase in the CPI. 
 
 #### Concluding Remarks
 
